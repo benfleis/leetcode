@@ -127,10 +127,10 @@ class RadixTrieNode:
         assert prefix
         return self._suffixes[_c2i(prefix[0])]
 
-    def _set_suffix(self, item: typing.Self) -> None:
-        assert item.prefix
-        i = _c2i(item.prefix[0])
-        self._suffixes[i] = item
+    def _set_suffix(self, suffix_node: typing.Self) -> None:
+        assert suffix_node.prefix
+        i = _c2i(suffix_node.prefix[0])
+        self._suffixes[i] = suffix_node
 
     # returned match node is last_node which contains deepest (partial) match node,
     # number of consumed chars prior to that node, and number of matched characters in that node.
@@ -167,33 +167,41 @@ class RadixTrieNode:
 
         return (cur, path_len, common_len)
 
+    def _merge_rotate(
+        self, word: str, match: typing.Self, path_len: int, common_len: int
+    ):
+        # merge/rotate, either node.prefix.startswith(word) or common prefix, diff tails
+        # approach: create suffixes, update existing node to point to them
+        # TODO: split to _merge
+        assert common_len != len(match.prefix)
+        word_suffix_len = len(word) - path_len
+
+        # split at `common_len` between match & match_child
+        child = copy.copy(match)
+        child.prefix = match.prefix[common_len:]
+        match.prefix = match.prefix[:common_len]
+        match.is_leaf = False  # reset, can be set below
+        match._suffixes = [None for _ in match._suffixes]
+        match._set_suffix(child)
+        if common_len == word_suffix_len:
+            match.is_leaf = True  # full word match at split; just flag leaf
+        else:
+            word_suffix_common = word[path_len + common_len :]
+            match._set_suffix(RadixTrieNode(word_suffix_common, is_leaf=True))
+
     def insert(self: typing.Self, word: str) -> None:
         (match, path_len, common_len) = self._match(word)
         # simplify comparisons below and avoid confusion; use word_suffix_len instead of word_len
         word_suffix_len = len(word) - path_len
-        word_suffix_common = word[path_len + common_len :]
-
         match_prefix_len = len(match.prefix)
+
         if common_len == match_prefix_len == word_suffix_len:
             match.is_leaf = True
         elif common_len == match_prefix_len < word_suffix_len:
+            word_suffix_common = word[path_len + common_len :]
             match._set_suffix(RadixTrieNode(word_suffix_common, is_leaf=True))
         else:
-            # merge/rotate, either node.prefix.startswith(word) or common prefix, diff tails
-            # approach: create suffixes, update existing node to point to them
-            # TODO: split to _merge
-            assert common_len != match_prefix_len
-            # split at `common_len` between match & match_child
-            match_child = copy.copy(match)
-            match_child.prefix = match.prefix[common_len:]
-            match.prefix = match.prefix[:common_len]
-            match.is_leaf = False  # reset, can be set below
-            match._suffixes = [None for _ in match._suffixes]
-            match._set_suffix(match_child)
-            if common_len == word_suffix_len:
-                match.is_leaf = True  # full word match at split; just flag leaf
-            else:
-                match._set_suffix(RadixTrieNode(word_suffix_common, is_leaf=True))
+            self._merge_rotate(word, match, path_len, common_len)
 
     def search(self, word: str) -> bool:
         (node, path_common, node_common) = self._match(word)
