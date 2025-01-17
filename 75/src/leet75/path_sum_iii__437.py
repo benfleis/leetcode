@@ -29,8 +29,6 @@ The number of nodes in the tree is in the range [0, 1000].
 -1000 <= targetSum <= 1000
 """
 
-import itertools
-
 
 # Definition for a binary tree node.
 class TreeNode:
@@ -52,30 +50,26 @@ class Solution:
         return count_path_sums(root, targetSum)
 
 
-def count_path_sums(node: TreeNode, target_sum: int) -> int:
-    # strategy: generate each path (n^2) from root to each node
-    # then the receiver will try to find a subpath _ending_ in the last node that meets target_sum
-    # this strategy is expensive but guarantees uniqueness when counting matching paths
-    def gen_paths():
-        # NOTE: assume generators entirely lazy so we can reuse same list
-        frontier = [[node]]
-        while frontier:
-            cur = frontier.pop()
-            last = cur[-1]
-            if last.left:
-                frontier.append(list(itertools.chain(cur, (last.left,))))
-            if last.right:
-                frontier.append(list(itertools.chain(cur, (last.right,))))
-            yield cur
+def count_path_sums(
+    node: TreeNode, target_sum: int, partial_sums: list[int] = []
+) -> int:
+    partial_sums = partial_sums or []  # new list if empty
 
+    # strategy: traverse (DFS) nodes while keeping stack of parent partial sums, count
+    # number of partials that when added with this node meet target
     count = 0
-    for path in gen_paths():
-        # print(path)
-        for start in range(len(path)):
-            if sum(map(lambda n: n.val, path[start:])) == target_sum:
-                # print(f"sub: {path[start:]}")
-                count += 1
 
+    # this makes path len 1 valid; o/w  use sum = node.val, and move append after
+    sum = 0
+    partial_sums.append(node.val)
+    for elt in reversed(partial_sums):
+        sum += elt
+        if sum == target_sum:
+            count += 1
+
+    count += count_path_sums(node.left, target_sum, partial_sums) if node.left else 0
+    count += count_path_sums(node.right, target_sum, partial_sums) if node.right else 0
+    partial_sums.pop()
     return count
 
 
